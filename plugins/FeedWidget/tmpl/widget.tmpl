@@ -1,0 +1,96 @@
+<mt:setvarblock name="html_head" append="1">
+<script type="text/javascript">
+<!--
+    function toggleFeedBlock(selection) {
+        for (i = 0; i < <mt:var name="feed_max_count">; i++) {
+            var fld = getByID('feed-container-' + i);
+            if (fld) {
+                if (i == selection.value) {
+                    fld.style.display = 'block';
+                } else {
+                    fld.style.display = 'none';
+                }
+            }
+        }
+        return false;
+    }
+
+    function add_feed() {
+        var t = getByID('add_url');
+        if (!t) return;
+        var text = t.value;
+        TC.Client.call({
+            'error': function(r) { t.value = ''; alert('error.'); },
+            'method': 'POST',
+            'uri': '<mt:var name="script_url">',
+            'arguments': {
+                '__mode' : 'feed_widget_add_feed',
+                'text' : text,
+                'blog_id': '<mt:var name="blog_id">'
+            }
+        });
+        location.reload();
+        return false;
+    }
+
+    function unread_feed(feed_id) {
+        TC.Client.call({
+            'error': function(r) { alert('error.'); },
+            'method': 'POST',
+            'uri': '<mt:var name="script_url">',
+            'arguments': {
+                '__mode' : 'feed_widget_unread_feed',
+                'id' : feed_id,
+                'blog_id': '<mt:var name="blog_id">'
+            }
+        });
+        location.reload();
+        return false;
+    }
+//-->
+</script>
+</mt:setvarblock>
+<mtapp:widget
+    class="widget blog_stats-widget"
+    can_close="1"
+    label="Feeds"
+    tabbed="1"
+    style="background-color='#ff0000'">
+    <mt:setvarblock name="widget_header">
+    <ul class="tabs">
+        <li id="feed-list-tab" class="selected-tab" mt:tab="feed-list" mt:command="select-tab"><a  href="javascript:void(0)"><span><__trans phrase="List"></span></a></li>
+        <li id="feed_manage-tab" class="tab" mt:tab="feed-manage" mt:command="select-tab"><a href="javascript:void(0)"><span><__trans phrase="Manage feeds"></span></a></li>
+    </ul>
+    </mt:setvarblock>
+    <div id="feed-list-panel" mt:tab-content="feed-list">
+    <mt:if name="feed_loop">
+        <select id="select_widget" onchange="toggleFeedBlock(this)" style="margin-bottom: 0.25em;">
+        <mt:loop name="feed_loop">
+            <option value="<mt:var name="__count__>"><mt:var name="feed_title"></option>
+        </mt:loop>
+        </select>
+    </mt:if>
+    <mt:if name="feed_loop">
+        <mt:loop name="feed_loop">
+            <div id="feed-container-<mt:var name="__count__">" <mt:unless name="__first__">style="display: none"</mt:unless>>
+                <p><a title="Stop aggregate this feed" onclick="javascript:unread_feed(<mt:var name="feed_id">); return false;" href="javascript:void(0);"><strong>Unread this feed.</strong></a></p>
+                <div class="list">
+                    <ul style="margin-bottom: 0.25em;">
+                        <mt:loop name="feed_items">
+                        <li style="margin-bottom: 0.25em;"><mt:var name="pubdate">&nbsp;<a href="<mt:var name="script_url">?__mode=view&amp;_type=entry&amp;blog_id=<mt:var name="blog_id">&amp;text=<mt:var name="body" escape="url">&amp;title=<mt:var name="title" escape="url">"><mt:var name="title"></a>
+                        </mt:loop>
+                    </ul>
+                </div>
+                <p></p>
+            </div>
+        </mt:loop>
+    <mt:else>
+        <p><__trans phrase="No feeds."></p>        
+    </mt:if>
+    </div>
+    <div id="feed-manage-panel" class="hidden" mt:tab-content="feed-manage">
+        <div style="margin-top: 0.5em;">Feed url: <input type="text" id="add_url" size="50" value="http://"/>
+            <a href="javascript:void(0)" onclick="add_feed(); return false;" title="<__trans phrase="Add feed">"><__trans phrase="Add feed"></a>
+        </div>
+    </div>
+</mtapp:widget>
