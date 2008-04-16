@@ -20,6 +20,7 @@
         if (!t) return;
         var text = t.value;
         TC.Client.call({
+            load: location.reload(),
             'error': function(r) { t.value = ''; alert('error.'); },
             'method': 'POST',
             'uri': '<mt:var name="script_url">',
@@ -29,12 +30,12 @@
                 'blog_id': '<mt:var name="blog_id">'
             }
         });
-        location.reload();
         return false;
     }
 
     function unread_feed(feed_id) {
         TC.Client.call({
+            load: location.reload(),
             'error': function(r) { alert('error.'); },
             'method': 'POST',
             'uri': '<mt:var name="script_url">',
@@ -44,7 +45,6 @@
                 'blog_id': '<mt:var name="blog_id">'
             }
         });
-        location.reload();
         return false;
     }
 //-->
@@ -73,7 +73,7 @@
     <mt:if name="feed_loop">
         <mt:loop name="feed_loop">
             <div id="feed-container-<mt:var name="__count__">" <mt:unless name="__first__">style="display: none"</mt:unless>>
-                <p><a title="Stop aggregate this feed" onclick="javascript:unread_feed(<mt:var name="feed_id">); return false;" href="javascript:void(0);"><strong>Unread this feed.</strong></a></p>
+                <p><a title="Stop aggregate this feed" onclick="unread_feed(<mt:var name="feed_id">);" href="javascript:void(0);"><strong>Unread this feed.</strong></a></p>
                 <div class="list">
                     <ul style="margin-bottom: 0.25em;">
                         <mt:loop name="feed_items">
@@ -90,7 +90,7 @@
     </div>
     <div id="feed-manage-panel" class="hidden" mt:tab-content="feed-manage">
         <div style="margin-top: 0.5em;">Feed url: <input type="text" id="add_url" size="50" value="http://"/>
-            <a href="javascript:void(0)" onclick="add_feed(); return false;" title="<__trans phrase="Add feed">"><__trans phrase="Add feed"></a>
+            <a href="javascript:void(0)" onclick="add_feed();" title="<__trans phrase="Add feed">"><__trans phrase="Add feed"></a>
         </div>
     </div>
 </mtapp:widget>
