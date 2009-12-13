@@ -1,5 +1,3 @@
-# This plugin works only on MT4. 
-#
 # DEPENDENCIES:
 #   * XML::Feed
 #   * Digest::MD5
@@ -12,10 +10,10 @@ package MT::Plugin::FeedsWidget;
 
 use strict;
 use base qw( MT::Plugin );
-our $VERSION = '0.1';
-our $SCHEMA_VERSION = '0.1';
+our $VERSION = '1.0';
+our $SCHEMA_VERSION = '0.2';
 
-use MT 4.0;
+use MT;
 use XML::Feed;
 use FeedsWidget::Feed;
 use Digest::MD5 qw(md5_hex);
@@ -25,14 +23,14 @@ use LWP::Simple;
 my $plugin = __PACKAGE__->new(
     {
         id          => 'FeedsWidget',
-        name        => "Feed Reader Dashboard Widget",
+        name        => 'Feed Reader Dashboard Widget',
         version     => $VERSION,
-        description => "This plugin works only on MT4.<br/>This plugin require XML::Feed.",
+        description => "Feed aggregate dashboard widget. You can repost easily.",
         author_name => 'Six Apart, Ltd.',
         author_link => 'http://www.sixapart.com/',
         key         => 'FeedsWidget',
-        settings =>
-          new MT::PluginSettings( [ ['use_qotd_us'], ['use_qotd_jp'], ] ),
+        settings    =>
+            new MT::PluginSettings( [ ['use_qotd_us'], ['use_qotd_jp'], ] ),
         blog_config_template => 'config.tmpl',
         schema_version => $SCHEMA_VERSION,
     }
@@ -55,11 +53,7 @@ sub init_registry {
                             handler   => \&_hdlr_widget,
                             set       => 'main',
                             singular  => 1,
-                            condition => sub {
-                                my ( $page, $scope ) = @_;
-                                return $page eq 'dashboard'
-                                  && $scope !~ /system/;
-                            },
+                            view      => 'blog',
                         },
                     },
                     methods => {
@@ -76,7 +70,6 @@ sub _hdlr_widget {
     my ( $tmpl, $param ) = @_;
 
     # prepare
-    use MT::I18N;
     my $enc     = MT::config('PublishCharset');
     my $blog_id = $app->blog->id;
     my $config  = $plugin->get_config_hash( 'blog:' . $blog_id );
@@ -86,7 +79,7 @@ sub _hdlr_widget {
     my $iter = FeedsWidget::Feed->load_iter({enable => 1});
     my $count = 0;
     while (my $feed = $iter->()) {
-        my $feed_item = fetch( $feed->url, $enc );
+        my $feed_item = _fetch( $feed->url, $enc );
         next unless $feed_item;
         $feed->title($feed_item->{feed_title}),$feed->save unless $feed->title;
         $feed_item->{feed_id} = $feed->id;
@@ -127,9 +120,7 @@ sub _hdlr_add_feed {
 
 sub _hdlr_unread_feed {
     my $app = shift;
-    print STDERR "hoge\n";
     my $id = $app->param('id');
-    print STDERR "id:$id\n";
     my $feed = FeedsWidget::Feed->load($id);
     if ($feed) {
         $feed->enable(0);
@@ -137,55 +128,6 @@ sub _hdlr_unread_feed {
     }
 
     $app->json_result(1);
-}
-
-sub fetch {
-    my ( $uri, $enc ) = @_;
-
-    my @feeds = XML::Feed->find_feeds($uri);
-    return undef unless @feeds;
-    my $feed_uri = $feeds[0];
-
-    my $cachedir = MT->config('TempDir');
-    if (! -e $cachedir) {
-        MT->log( { message => "Cannot found $cachedir.", } );
-        return undef;
-    }
-    my $cache = File::Spec->catdir($cachedir, Digest::MD5::md5_hex($uri));
-    my $status = LWP::Simple::mirror($feed_uri, $cache)
-        or MT->log({ message => "Cannot get content from $uri."}), return undef;
-    my $FH;
-    open $FH, $cache
-        or MT->log({ message => "Cannot read content from file."}), return undef;
-    my $feed = XML::Feed->parse( $FH );
-    close $FH;
-
-    return undef unless $feed;
-    my $feed_item;
-    my @items;
-    for my $entry ( $feed->entries ) {
-        my $content = $entry->content;
-        my $body = $content ? $content->body : '';
-        $body = MT::I18N::encode_text( MT::I18N::utf8_off($body), undef, $enc );
-
-        my $date = $entry->modified;
-        $date = $date ? $date->ymd('/') : '';
-        my $pubdate = sprintf( "%s", $date );
-
-        push @items,
-          {
-            title => MT::I18N::encode_text( MT::I18N::utf8_off($entry->title), undef, $enc ),
-            link  => $entry->link,
-            body    => '<blockquote>' . $body . '</blockquote><br/>',
-            pubdate => $pubdate,
-          };
-    }
-
-    $feed_item->{feed_items} = \@items;
-    $feed_item->{feed_link}  = MT::I18N::encode_text( $feed->link, undef, $enc );
-    $feed_item->{feed_title} = MT::I18N::encode_text( $feed->title, undef, $enc );
-
-    return $feed_item;
 }
 
 sub load_config {
@@ -198,31 +140,13 @@ sub load_config {
     $plugin->SUPER::load_config($param, $scope);
 }
 
-sub _update_qotd {
-    my ($url, $title, $state) = @_;
-    my $app = MT->instance;
-    my $blog = $app->blog;
-    my $user = $app->user;
-
-    my $qotd = FeedsWidget::Feed->load({url => $url});
-    unless ($qotd) {
-        $qotd = FeedsWidget::Feed->new;
-        $qotd->blog_id($blog->id);
-        $qotd->author_id($user->id);
-        $qotd->title($title);
-        $qotd->url($url);
-    }
-    $qotd->enable($state);
-    $qotd->save;
-}
-
 sub save_config {
     my $plugin = shift;
     my $app = MT->instance;
     return unless $app->can('user');
 
     my ($param, $scope) = @_;
-    
+
     _update_qotd('http://questions.vox.com/',
                  'QOTD',
                  $param->{use_qotd_us} ? 1 : 0);
@@ -241,6 +165,97 @@ sub reset_config {
     my ($scope) = @_;
     $scope .= ':user:' . $app->user->id if $scope =~ m/^blog:/;
     $plugin->SUPER::reset_config($scope);
+}
+
+sub _fetch {
+    my ( $uri, $enc ) = @_;
+
+    my @feeds = XML::Feed->find_feeds($uri);
+    return undef unless @feeds;
+    my $feed_uri = $feeds[0];
+
+    my $cachedir = MT->config('TempDir');
+    if (! -e $cachedir) {
+        MT->log( { message => "Cannot find $cachedir.", } );
+        return undef;
+    }
+    my $cache = File::Spec->catdir($cachedir, Digest::MD5::md5_hex($uri));
+    my $status = LWP::Simple::mirror($feed_uri, $cache)
+        or MT->log({ message => "Cannot get content from $uri."}), return undef;
+    my $FH;
+    open $FH, $cache
+        or MT->log({ message => "Cannot read content from file."}), return undef;
+    my $feed = XML::Feed->parse( $FH );
+    close $FH;
+
+    return undef unless $feed;
+
+    my $app = MT->instance;
+    my $author = $app->user;
+    my $auth_prefs = $author->entry_prefs;
+    my $delim = chr( $auth_prefs->{tag_delim} );
+
+    my $feed_item;
+    my @items;
+    for my $entry ( $feed->entries ) {
+        my $content = $entry->content;
+        my $body = $content ? $content->body : '';
+        $body = Encode::decode_utf8($body)
+            if !MT::I18N::is_utf8($body);
+        my $title = $entry->title;
+        $title = Encode::decode_utf8($title)
+            if !MT::I18N::is_utf8($title);
+        my $date = $entry->modified;
+        $date = $date ? $date->ymd('/') : '';
+        my $pubdate = sprintf( "%s", $date );
+
+        my $tags;
+        my @tags = $entry->category;
+        if ( @tags ) {
+            foreach my $tag ( @tags ) {
+                $tag = Encode::decode_utf8($tag)
+                    if !MT::I18N::is_utf8($tag);
+                $tags .= $tag . $delim;
+            }
+        }
+
+        push @items,
+          {
+            title   => MT::I18N::encode_text( $title, undef, $enc ),
+            link    => $entry->link,
+            body    => '<blockquote>' . MT::I18N::encode_text($body, undef, $enc ) . '</blockquote><br/>',
+            tags    => $tags,
+            pubdate => $pubdate,
+          };
+    }
+
+    $feed_item->{feed_items} = \@items;
+    $feed_item->{feed_link}  = $feed->link;
+
+    my $feed_title = $feed->title;
+    $feed_title = Encode::decode_utf8($feed_title)
+        if !MT::I18N::is_utf8($feed_title);
+    $feed_item->{feed_title} = MT::I18N::encode_text($feed_title, undef, $enc );
+
+    return $feed_item;
+}
+
+sub _update_qotd {
+    my ($url, $title, $state) = @_;
+    my $app = MT->instance;
+    my $blog = $app->blog;
+    my $user = $app->user;
+
+    my $qotd = FeedsWidget::Feed->load({url => $url});
+    unless ($qotd) {
+        $qotd = FeedsWidget::Feed->new;
+        $qotd->blog_id($blog->id);
+        $qotd->author_id($user->id);
+        $qotd->title($title);
+        $qotd->url($url);
+    }
+    $qotd->enable($state);
+    $qotd->save;
 }
 
 1;
