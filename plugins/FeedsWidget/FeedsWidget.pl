@@ -223,8 +223,7 @@ sub _fetch {
           {
             title   => MT::I18N::encode_text( $title, undef, $enc ),
             link    => $entry->link,
-            body    => '<blockquote cite="'.$entry->link . '" title="' . MT::I18N::encode_text( $title, undef, $enc )
-                . '"><p>' . MT::I18N::encode_text($body, undef, $enc ) . '</p></blockquote><br/>',
+            body    => '<blockquote>' . MT::I18N::encode_text($body, undef, $enc ) . '</blockquote><br/>',
             tags    => $tags,
             pubdate => $pubdate,
           };
